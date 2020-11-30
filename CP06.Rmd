@@ -1,0 +1,253 @@
+---
+title: "BMV VS Volkswagen - CUNEF Máster Data Science"
+author: "Marta Ruedas Burgos"
+date: "11/30/2020"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+## Descripción de la tarea
+
+Utilizando datos diarios de los dos series desde el año 2014, debemos analizar la relación entre BMW y Volkswagen, contestando a las siguiente preguntas:
+
+¿Estimar el modelo garch de BMW?
+¿Están cointegradas?
+Plantear un modelo VAR mensual entre los dos activos.
+Estimar un modelo HHM para la serie semanal de BMW
+
+## Objetivo
+
+Objetivo será analizar la relación entre BMW y Volkswagen.
+Con este fin, y con la ayuda de la biblioteca "Quantmod" de R, se obtendrán y recopilarán datos sobre los precios de las dos empresas en el portal Yahoo Finance. El periodo considerado es de enero de 2014 a octubre de 2020. El objetivo principal es proponer un modelo GARCH y un modelo VAR entre los dos activos.
+
+## Librerias
+```{undefined echo=TRUE}
+library("quantmod") 
+library(forecast)
+library("fGarch")
+library(vars)
+```
+
+## Función Test Lagrange
+```{undefined echo=TRUE}
+
+archTest <- function(rtn, m = 10){
+ 
+  y = (rtn - mean(rtn))^2
+  T = length(rtn)
+  atsq = y[(m+1):T]
+  x = matrix(0,(T-m),m)
+  for (i in 1:m){
+    x[,i]=y[(m+1-i):(T-i)]
+  }
+  md=lm(atsq~x)
+  summary(md)
+}
+```
+
+## Recuperación de Datos de Yahoo
+Cogemos los datos de Yahoo, los datos de BMW y VolKswagen. 
+Definimos los datos para ambas compañias. 
+```{undefined echo=TRUE}
+BData <- getSymbols("BMW.DE", from = "2014-01-01", to = "2020-10-30", auto.assign = FALSE)
+VData <- getSymbols("VOW.DE", from = "2014-01-01", to = "2020-10-30", auto.assign = FALSE)
+
+BMWDat = Ad(BData)
+VOWDat = Ad(VData)
+```
+
+## Daily Returns
+
+```{undefined echo=TRUE}
+
+dRentBMW = dailyReturn(BMWDat, type = 'log',leading = FALSE)
+dRentVOW = dailyReturn(VOWDat, type = 'log',leading = FALSE)
+
+dRentBMW = na.exclude(dRentBMW)
+dRentVOW = na.exclude(dRentVOW)
+```
+
+
+Primero, obtenemos los rendimientos de los dos activos y los presentamos en el gráfico conjunto junto con los cambios de precio durante el período de estimación.
+
+## Plotting Returns
+Returns y Stocks de ambas compañías.
+```{undefined echo=TRUE}
+plot.zoo(cbind(BMWDat, dRentBMW), 
+         main = " BMW Profitability",
+         xlab = "Years",
+         ylab = c("Price","Profitability"))
+plot.zoo(cbind(VOWDat, dRentVOW), 
+         main = " VOLKSWAGEN Profitability",
+         xlab = "Years",
+         ylab = c("Price","Profitability"))
+```
+
+En el gráfico que se muestra, podemos ver claramente el impacto de la “Puerta Diesel” en septiembre de 2015, cuando Volkswagen tuvo un escándalo de emisiones contaminantes. Para Volkswagen, este es un impacto muy negativo. Y, por supuesto, el "shock" que provocó el Covid en marzo de este año es muy evidente en los precios y la rentabilidad de ambas empresas.
+
+
+### Modelo GARCH
+
+Se propone un modelo GARCH. Estos modelos se utilizan para series de tiempo y tratan de analizar su varianza, porque esta no es constante junto con la desviación estándar (volatilidad de la acción). Por lo tanto, a través de modelos como GARCH, podemos predecir el valor futuro de la volatilidad del retorno de los activos.
+
+
+## Rendimientos al cuadradro
+
+## Plot Proxy Volatility
+```{undefined echo=TRUE}
+
+plot.zoo(cbind(BMWDat, dRentBMW, dRentBMW^2), main = "BMW Profitability", xlab = "Years", ylab = c("Price","Profitability","Volatility"))
+plot.zoo(cbind(VOWDat, dRentVOW, dRentVOW^2), main = "VOW Profitability", xlab = "Years", ylab = c("Price","Profitability","Volatility"))
+```
+
+
+## ACF and PACF Proxy Returns
+```{undefined echo=TRUE}
+
+VolProxyBMW = dRentBMW^2 
+VolProxyVOW = dRentVOW^2
+
+tsdisplay(VolProxyBMW) 
+tsdisplay(VolProxyVOW)
+```
+
+Los rendimientos de los activos no son constantes. Además, haremos el estudio con los tests de Ljung-Box.
+
+## LJUNG-Box 
+
+### Tests
+```{undefined echo=TRUE}
+Box.test(VolProxyBMW,lag=10,  type="Lj")
+Box.test(VolProxyBMW,lag=20,  type="Lj")
+Box.test(VolProxyBMW,lag=40,  type="Lj")
+Box.test(VolProxyVOW,lag=10,  type="Lj")
+Box.test(VolProxyVOW,lag=20,  type="Lj")
+Box.test(VolProxyVOW,lag=40,  type="Lj")
+```
+
+
+## Lagrange Test
+
+El test de Lagrange, como resultado de una hipótesis nula será el resultado de no haber GARCH.
+
+LM TEST
+```{undefined echo=TRUE}
+archTest(dRentBMW,10)
+archTest(dRentVOW,10)
+```
+
+
+## Arch
+```{undefined echo=TRUE}
+BMWarch = garchFit(~1 + garch(1,0),data = dRentBMW, trace = F) 
+summary(BMWarch)
+resi = residuals(BMWarch, standardize = T) 
+resi = xts(resi,order.by = index(dRentBMW)) 
+tsdisplay(resi^2) 
+VOWarch = garchFit(~1 + garch(1,0),data = dRentVOW, trace = F) 
+summary(VOWarch)
+resi = residuals(VOWarch, standardize = T) 
+resi = xts(resi,order.by = index(dRentVOW)) 
+tsdisplay(resi^2) 
+```
+
+
+
+## Modelo GARCH
+
+## BMW Garch
+```{undefined echo=TRUE}
+BMWgarch = fGarch::garchFit(~1 + garch(1,1), data = dRentBMW, trace = F) 
+summary(BMWgarch)
+resi=residuals(BMWgarch,standardize=T) 
+resi=xts(resi,order.by=index(dRentBMW)) 
+tsdisplay(resi^2) 
+plot(BMWgarch, which = 13)
+```
+
+Ahora observaremos la distribución de T Student para las diferentes compañías.
+
+## T Student BMW
+```{undefined echo=TRUE}
+BMWstd = garchFit(~1 + garch(1,1), data = dRentBMW, trace = F, cond.dist = "std")
+summary(BMWstd)
+plot(BMWstd, which = 13)
+```
+
+## T Students VOLKS
+```{undefined echo=TRUE}
+VOWstd = garchFit(~1 + garch(1,1), data = dRentVOW, trace = F, cond.dist = "std")
+summary(VOWstd)
+plot(VOWstd, which = 13)
+```
+
+Ahora, hacemos las predicciones para las diferentes compañías.
+
+## Predicciones BMW T Students
+```{undefined echo=TRUE}
+predict(BMWstd) 
+predict(BMWstd, n.ahead = 10, plot=TRUE, crit_val=2) 
+predict(BMWstd,n.ahead=20,plot=TRUE,conf=.9,nx=100) 
+```
+
+## Predicciones VOW T Students
+```{undefined echo=TRUE}
+predict(VOWstd) 
+predict(VOWstd, n.ahead = 10, plot=TRUE, crit_val=2) 
+predict(VOWstd,n.ahead=20,plot=TRUE,conf=.9,nx=100) 
+```
+
+## Predicciones BMW Garch
+```{undefined echo=TRUE}
+predict(BMWgarch) 
+predict(BMWgarch, n.ahead = 10, plot=TRUE, crit_val=2) 
+predict(BMWgarch,n.ahead=20,plot=TRUE,conf=.9,nx=100) 
+```
+
+### Modelo VAR
+
+Todas las variables se relacionan entre sí, es decir, todas las variables se consideran ahora variables endógenas. Se considerará tantas ecuaciones como variables haya para incluir. Los vectores autoregresivos se utilizán para estudiar la relación bidireccional entre variables. Dado que se aplica a series estacionarias, usaremos la diferencia para realizar la transformación. 
+Además, convertimos a datos mensuales.
+
+```{undefined echo=TRUE}
+bmw.ret <- diff(log(BMWDat))
+volks.ret <- diff(log(VOWDat))
+```
+
+```{undefined echo=TRUE}
+bmw.m <- to.monthly(bmw.ret)$bmw.ret.Close
+volks.m <- to.monthly(volks.ret)$volks.ret.Close
+```
+
+```{undefined echo=TRUE}
+auto = na.exclude(cbind(bmw.m, volks.m))
+```
+
+
+```{undefined echo=TRUE}
+VARselect(auto)
+```
+
+```{undefined echo=TRUE}
+var = VAR(auto)
+summary(var)
+```
+
+## Predicción VAR
+Impulso respuesta
+```{undefined echo=TRUE}
+var.pred <- predict(var, n.ahead = 10, ci = 0.95)
+Phi(var)
+plot(var.pred)
+```
+
+```{undefined echo=TRUE}
+var.irf <- irf(var) 
+plot(var.irf)
+```
+
+# GitHub
+
+Repositorio CP06: https://github.com/martaruedas/CP06.git
